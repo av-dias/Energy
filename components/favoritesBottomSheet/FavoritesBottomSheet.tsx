@@ -1,0 +1,211 @@
+import { View, Text, Pressable, TextInput } from "react-native";
+import BottomSheet from "../bottomSheet";
+import { AntDesign, Ionicons } from "@expo/vector-icons";
+import storage from "../../storage/storageKeys";
+import { addFavoriteFolder } from "../../storage/favoriteStorage";
+import { Dispatch, SetStateAction } from "react";
+import { activeApi } from "../../service/serviceSelector";
+
+type Props = {
+  newFolderVisible: boolean;
+  favoriteList: string[];
+  selectedAtivity: string | undefined;
+  folderName: string | undefined;
+  setModalFavoritesVisible: Dispatch<SetStateAction<boolean>>;
+  setFolderName: Dispatch<SetStateAction<string | undefined>>;
+  setFavoriteList: Dispatch<SetStateAction<string[]>>;
+  setNewFolderVisible: Dispatch<SetStateAction<boolean>>;
+  isServerOnline: boolean;
+  server: string;
+};
+
+export const FavoritesBottomSheet: React.FC<Props> = ({
+  newFolderVisible,
+  favoriteList,
+  selectedAtivity,
+  folderName,
+  setModalFavoritesVisible,
+  setFolderName,
+  setFavoriteList,
+  setNewFolderVisible,
+  isServerOnline,
+  server,
+}) => {
+  return (
+    <BottomSheet color={"lightgray"}>
+      <View style={{ paddingHorizontal: 5, alignItems: "flex-end" }}>
+        <Pressable
+          style={{ padding: 10, backgroundColor: "transparent" }}
+          onPress={() => {
+            setModalFavoritesVisible(false);
+            setNewFolderVisible(false);
+            setFolderName(undefined);
+          }}
+        >
+          <AntDesign name="closecircleo" size={20} color="black" />
+        </Pressable>
+      </View>
+      <View style={{ flex: 1, padding: 10, paddingTop: 5, gap: 10 }}>
+        {favoriteList &&
+          favoriteList.map((folder: string) => (
+            <Pressable
+              key={"Fav" + folder}
+              onPress={async () => {
+                if (selectedAtivity) {
+                  setModalFavoritesVisible(false);
+                  await activeApi(
+                    isServerOnline,
+                    server
+                  ).favoriteService.addFavoriteToFolder(
+                    selectedAtivity,
+                    folder
+                  );
+                } else {
+                  alert("No activity selected.");
+                }
+              }}
+            >
+              <View
+                style={{
+                  height: 80,
+                  backgroundColor: color.light.glass,
+                  borderRadius: 10,
+                  justifyContent: "center",
+                  padding: 10,
+                  flexDirection: "row",
+                  gap: 10,
+                }}
+              >
+                <View
+                  style={{
+                    height: "auto",
+                    width: 80,
+                    backgroundColor: "lightgray",
+                    borderRadius: 5,
+                  }}
+                ></View>
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: "lightgray",
+                    borderRadius: 5,
+                  }}
+                >
+                  <View style={{ padding: 5 }}>
+                    <Text style={{ fontWeight: "bold" }}>
+                      {folder?.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        <View>
+          <Pressable
+            onPress={() => {
+              setNewFolderVisible(true);
+            }}
+          >
+            <View
+              style={{
+                width: "auto",
+                padding: 10,
+                paddingLeft: 20,
+                backgroundColor: "transparent",
+                alignSelf: "flex-end",
+                alignItems: "flex-end",
+              }}
+            >
+              <Text style={{ color: "blue" }}>New Folder</Text>
+            </View>
+          </Pressable>
+        </View>
+        {newFolderVisible && (
+          <Pressable
+            onPress={() => {
+              setModalFavoritesVisible(false);
+            }}
+          >
+            <View
+              style={{
+                height: 80,
+                backgroundColor: color.light.glass,
+                borderRadius: 10,
+                justifyContent: "center",
+                padding: 10,
+                flexDirection: "row",
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  height: "auto",
+                  width: 80,
+                  backgroundColor: "lightgray",
+                  borderRadius: 5,
+                }}
+              ></View>
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: "lightgray",
+                  borderRadius: 5,
+                }}
+              >
+                <View style={{ padding: 5, paddingBottom: 0 }}>
+                  <TextInput
+                    onChangeText={(text) => {
+                      setFolderName(text);
+                    }}
+                    placeholder="Folder Name"
+                  ></TextInput>
+                </View>
+                <View
+                  style={{
+                    gap: 10,
+                    marginTop: -5,
+                    paddingRight: 5,
+                    backgroundColor: "transparent",
+                    flexDirection: "row",
+                    justifyContent: "flex-end",
+                    alignItems: "center",
+                  }}
+                >
+                  <Pressable
+                    style={{ padding: 5, backgroundColor: "transparent" }}
+                    onPress={async () => {
+                      if (folderName) {
+                        setFavoriteList((prev: any) => [...prev, folderName]);
+                        await activeApi(
+                          isServerOnline,
+                          server
+                        ).favoriteService.addFavoriteFolder(folderName);
+                        setFolderName(undefined);
+                      } else {
+                        alert("Please insert a folder name.");
+                      }
+                    }}
+                  >
+                    <AntDesign name="checkcircleo" size={22} color="black" />
+                  </Pressable>
+                  <Pressable
+                    style={{ padding: 5, backgroundColor: "transparent" }}
+                    onPress={() => {
+                      alert("Cancel");
+                    }}
+                  >
+                    <Ionicons
+                      name="trash-bin-outline"
+                      size={24}
+                      color="black"
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Pressable>
+        )}
+      </View>
+    </BottomSheet>
+  );
+};
