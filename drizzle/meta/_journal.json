@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1756478627910,
+      "tag": "0000_lovely_marten_broadcloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1756481667030,
+      "tag": "0001_bouncy_captain_midlands",
+      "breakpoints": true
+    }
+  ]
+}
