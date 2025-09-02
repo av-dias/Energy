@@ -73,9 +73,28 @@ const updateBaseUrlForUserByEmail = (
   }
 };
 
+const updateUUIDForUserByEmail = (
+  db: ExpoSQLiteDatabase<Record<string, never>> & {
+    $client: SQLiteDatabase;
+  },
+  email: string,
+  UUID: string
+) => {
+  try {
+    return db
+      .update(users)
+      .set({ uuid: UUID })
+      .where(eq(users.email, email))
+      .run();
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 export {
   getAllUsers,
-  getUserByEmail as getObjectByEmail,
+  getUserByEmail,
   insertOneUser,
   updateBaseUrlForUserByEmail,
+  updateUUIDForUserByEmail,
 };

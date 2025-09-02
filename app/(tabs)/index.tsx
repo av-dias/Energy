@@ -10,12 +10,21 @@ import { useFocusEffect } from "expo-router";
 import CustomPressable from "@/components/customPressable";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import color from "@/constants/color";
+import {
+  deleteAllMonthlyReports,
+  getAllMonthlyReports,
+  getMonthlyReportByMonth,
+  updateMonthlyReport,
+} from "@/service/monthlyReportService";
+import { getDatabase } from "@/db/client";
+import { getUserByEmail } from "@/service/userService";
+import { fetchWithTimeout } from "@/service/serviceUtils";
 
 export default function TabOneScreen() {
   /* Dev Zone Start */
   const {
     serverConfig,
-    isServerOnline,
+    server: [isServerOnline, setIsServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
   const [server] = serverConfig;
@@ -28,12 +37,37 @@ export default function TabOneScreen() {
   const [daysAnalysed, setDaysAnalysed] = useState(0);
   const [refresh, setRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
+  const db = getDatabase();
 
   const LoadingIndicator = () => (
     <View style={{ backgroundColor: "transparent", padding: 10 }}>
       <Text>Loading...</Text>
     </View>
   );
+
+  const getUser = () => {
+    const user = getUserByEmail(db, email);
+    return user;
+  };
+
+  const triggerRefresh = async () => {
+    setRefresh((prev) => !prev);
+
+    try {
+      const response = await fetchWithTimeout(
+        `http://${server}:8080/api/v1/health`
+      );
+
+      const data = await response?.json();
+      if (data) {
+        setIsServerOnline(true);
+      } else {
+        setIsServerOnline(false);
+      }
+    } catch (error) {
+      console.error("Error fetching server health:", error);
+    }
+  };
 
   /**
    * TODO: Remove this useEffect
@@ -45,7 +79,13 @@ export default function TabOneScreen() {
     useCallback(() => {
       async function fetchData() {
         setLoading(true);
-        fetch(`http://${server}:8080/graphql`, {
+        const reports = getAllMonthlyReports(db);
+        console.log(reports);
+
+        const user = getUser();
+        console.log(user);
+
+        const report = await fetchWithTimeout(`http://${server}:8080/graphql`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -53,29 +93,29 @@ export default function TabOneScreen() {
           body: JSON.stringify({
             query: `
                     {
-                    getMonthlyReport(
-                      userId: "c3c8a408-8442-413b-99f5-23306150273c"
-                      month: ${month + 1}
-                      year: ${year}
-                    ) {
-                      id
-                      month
-                      totalKwh
-                      totalCost
-                      averageCost
-                      numberOfDays
-                      predictedTotalCost
-                      createdAt
+                      getMonthlyReport(
+                        userId: "${user?.uuid}"
+                        month: ${month + 1}
+                        year: ${year}
+                      ) {
+                        id
+                        month
+                        totalKwh
+                        totalCost
+                        averageCost
+                        numberOfDays
+                        predictedTotalCost
+                        createdAt
+                      }
                     }
-                  }
             `,
           }),
-        })
-          .then((response) => {
-            return response.json();
-          })
-          .then((data) => {
-            console.log(data);
+        });
+
+        if (report) {
+          const data = await report?.json();
+          console.log(data);
+          if (data.data.getMonthlyReport != null) {
             setTotalKwh(data.data.getMonthlyReport.totalKwh);
             setAverageCost(data.data.getMonthlyReport.averageCost.toFixed(2));
             setDaysAnalysed(data.data.getMonthlyReport.numberOfDays);
@@ -83,17 +123,67 @@ export default function TabOneScreen() {
               today: data.data.getMonthlyReport.totalCost,
               prediction: data.data.getMonthlyReport.predictedTotalCost,
             });
-          })
-          .catch((error) => {
-            console.error("Error fetching data:", error);
-          })
-          .finally(() => {
-            setLoading(false);
-          });
+
+            updateMonthlyReport(
+              db,
+              month + 1,
+              year,
+              {
+                id: data.data.getMonthlyReport.id,
+                averageCost: data.data.getMonthlyReport.averageCost,
+                month: data.data.getMonthlyReport.month,
+                numberOfDays: data.data.getMonthlyReport.numberOfDays,
+                predictedTotalCost:
+                  data.data.getMonthlyReport.predictedTotalCost,
+                totalKwh: data.data.getMonthlyReport.totalKwh,
+              },
+              user?.email ?? ""
+            );
+          } else {
+            setTotalKwh(0);
+            setAverageCost(0);
+            setDaysAnalysed(0);
+            setBarData({
+              today: 0,
+              prediction: 0,
+            });
+
+            //deleteAllMonthlyReports(db);
+          }
+        }
+
+        setLoading(false);
+      }
+
+      async function getDbData() {
+        const reports = getAllMonthlyReports(db);
+        console.log(reports);
+
+        const user = getUser();
+
+        const report = getMonthlyReportByMonth(
+          db,
+          user?.uuid ?? "",
+          month + 1,
+          year
+        );
+
+        setTotalKwh(report?.totalKwh || 0);
+        setAverageCost(Number(report?.averageCost?.toFixed(2)) || 0);
+        setDaysAnalysed(report?.numberOfDays || 0);
+        setBarData({
+          today: Number(
+            ((report?.averageCost ?? 0) * (report?.numberOfDays ?? 0)).toFixed(
+              2
+            )
+          ),
+          prediction: report?.predictedTotalCost || 0,
+        });
       }
 
       if (isServerOnline) fetchData();
-    }, [server, refresh])
+      else getDbData();
+    }, [server, month, refresh, isServerOnline])
   );
 
   const barData = [
@@ -138,9 +228,19 @@ export default function TabOneScreen() {
           right: 10,
           padding: 5,
           borderRadius: 5,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 5,
         }}
       >
         <Text style={{ fontSize: 10 }}>{`${email.split("@")[0]}`}</Text>
+        <View style={{ backgroundColor: "transparent" }}>
+          <FontAwesome
+            name="circle"
+            size={10}
+            color={isServerOnline ? "green" : "red"}
+          />
+        </View>
       </View>
       <View style={styles.container}>
         <View
@@ -152,14 +252,21 @@ export default function TabOneScreen() {
             justifyContent: "center",
           }}
         >
+          <CustomPressable
+            color={"lightblue"}
+            text={"-"}
+            padding={8}
+            paddingVertical={2}
+            onPress={() => setMonth(month - 1)}
+          />
           <Text style={styles.title}>{MONTHS_LONG[month]}</Text>
-          <View style={{ backgroundColor: "transparent" }}>
-            <FontAwesome
-              name="circle"
-              size={10}
-              color={isServerOnline ? "green" : "red"}
-            />
-          </View>
+          <CustomPressable
+            color={"lightblue"}
+            text={"+"}
+            padding={8}
+            paddingVertical={2}
+            onPress={() => setMonth(month + 1)}
+          />
         </View>
         <Text style={styles.subtitle}>{`${
           new Date(new Date().getFullYear(), month + 1, 0).getDate() -
@@ -224,7 +331,7 @@ export default function TabOneScreen() {
           <CustomPressable
             color={"lightblue"}
             text={"Refresh"}
-            onPress={() => setRefresh(!refresh)}
+            onPress={triggerRefresh}
             padding={10}
           />
         </View>
@@ -234,8 +341,10 @@ export default function TabOneScreen() {
           }}
         >
           <Text>
-            <Text>{`Average daily cost: ${averageCost}`}</Text>
-            <Text style={{ fontSize: 10 }}>{`€`}</Text>
+            <Text
+              style={{ color: "gray" }}
+            >{`Average daily cost: ${averageCost}`}</Text>
+            <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
           </Text>
         </View>
       </View>
@@ -254,6 +363,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    width: 120,
+    textAlign: "center",
+    color: "black",
   },
   server: {
     fontSize: 12,
@@ -261,6 +373,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
+    color: "gray",
   },
   separator: {
     marginVertical: 30,

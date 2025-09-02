@@ -6,7 +6,7 @@ import { router, useFocusEffect } from "expo-router";
 import { getDatabase } from "@/db/client";
 import {
   getAllUsers,
-  getObjectByEmail,
+  getUserByEmail,
   insertOneUser,
 } from "@/service/userService";
 import { useMigrations } from "drizzle-orm/expo-sqlite/migrator";
@@ -37,7 +37,7 @@ export default function LoginScreen() {
     console.log("Login pressed");
 
     // Check if user exists
-    const existingUser = getObjectByEmail(db, inputEmail);
+    const existingUser = getUserByEmail(db, inputEmail);
 
     // If user exists, log them in
     if (existingUser) {
@@ -69,9 +69,6 @@ export default function LoginScreen() {
         if (allUsers && allUsers?.length > 0) {
           setEmail(allUsers[0].email);
           setServer(allUsers[0].baseUrl);
-
-          console.log(allUsers[0]);
-
           router.replace("/(tabs)");
         }
 

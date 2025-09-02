@@ -55,7 +55,7 @@ const db = getDatabase();
 export const ServerSyncContainer = () => {
   const {
     serverConfig,
-    isServerOnline,
+    server: [isServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
   const [server, setServer] = serverConfig;

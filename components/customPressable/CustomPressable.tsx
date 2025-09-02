@@ -5,6 +5,7 @@ type Props = {
   text: string;
   onPress: any;
   padding?: number;
+  paddingVertical?: number;
 };
 
 const CustomPressable: React.FC<Props> = (props) => {
@@ -14,6 +15,7 @@ const CustomPressable: React.FC<Props> = (props) => {
         {
           backgroundColor: props.color,
           padding: props.padding ? props.padding : 20,
+          paddingVertical: props.paddingVertical ? props.paddingVertical : null,
           borderRadius: 10,
           opacity: pressed ? props.onPress && 0.8 : 1,
           marginHorizontal: pressed ? 1 : 0,
