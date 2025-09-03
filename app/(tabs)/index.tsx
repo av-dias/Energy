@@ -45,6 +45,21 @@ export default function TabOneScreen() {
     </View>
   );
 
+  const daysTillEndOfMonth = () => {
+    const today = new Date();
+    const endOfMonth = new Date(
+      new Date().getFullYear(),
+      month + 1,
+      0
+    ).getDate();
+
+    if (today.getMonth() > month) {
+      return 0;
+    } else {
+      return endOfMonth - today.getDate();
+    }
+  };
+
   const getUser = () => {
     const user = getUserByEmail(db, email);
     return user;
@@ -83,7 +98,6 @@ export default function TabOneScreen() {
         console.log(reports);
 
         const user = getUser();
-        console.log(user);
 
         const report = await fetchWithTimeout(`http://${server}:8080/graphql`, {
           method: "POST",
@@ -133,6 +147,7 @@ export default function TabOneScreen() {
                 averageCost: data.data.getMonthlyReport.averageCost,
                 month: data.data.getMonthlyReport.month,
                 numberOfDays: data.data.getMonthlyReport.numberOfDays,
+                totalCost: data.data.getMonthlyReport.totalCost,
                 predictedTotalCost:
                   data.data.getMonthlyReport.predictedTotalCost,
                 totalKwh: data.data.getMonthlyReport.totalKwh,
@@ -147,8 +162,6 @@ export default function TabOneScreen() {
               today: 0,
               prediction: 0,
             });
-
-            //deleteAllMonthlyReports(db);
           }
         }
 
@@ -172,11 +185,7 @@ export default function TabOneScreen() {
         setAverageCost(Number(report?.averageCost?.toFixed(2)) || 0);
         setDaysAnalysed(report?.numberOfDays || 0);
         setBarData({
-          today: Number(
-            ((report?.averageCost ?? 0) * (report?.numberOfDays ?? 0)).toFixed(
-              2
-            )
-          ),
+          today: report?.totalCost || 0,
           prediction: report?.predictedTotalCost || 0,
         });
       }
@@ -268,10 +277,9 @@ export default function TabOneScreen() {
             onPress={() => setMonth(month + 1)}
           />
         </View>
-        <Text style={styles.subtitle}>{`${
-          new Date(new Date().getFullYear(), month + 1, 0).getDate() -
-          new Date().getDate()
-        } days till end of month`}</Text>
+        <Text
+          style={styles.subtitle}
+        >{`${daysTillEndOfMonth()} days till end of month`}</Text>
         <Text style={styles.server}>{`http://${server}:8080/graphql`}</Text>
         <View
           style={styles.separator}
@@ -338,12 +346,19 @@ export default function TabOneScreen() {
         <View
           style={{
             backgroundColor: "transparent",
+            alignContent: "center",
           }}
         >
-          <Text>
+          <Text style={{ textAlign: "center" }}>
             <Text
               style={{ color: "gray" }}
             >{`Average daily cost: ${averageCost}`}</Text>
+            <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
+          </Text>
+          <Text style={{ textAlign: "center" }}>
+            <Text style={{ color: "gray" }}>{`Total cost without fees: ${(
+              averageCost * daysAnalysed
+            ).toFixed(2)}`}</Text>
             <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
           </Text>
         </View>

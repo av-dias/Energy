@@ -33,6 +33,10 @@ export default function LoginScreen() {
   const [users, setUsers] = useState<any[] | undefined>(undefined);
   const { success, error } = useMigrations(db, migrations);
 
+  console.log(success);
+
+  console.log(error);
+
   const handleLogin = () => {
     console.log("Login pressed");
 

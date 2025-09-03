@@ -63,12 +63,15 @@ const updateMonthlyReport = (
     averageCost: parseFloat(data.averageCost),
     month: data.month,
     numberOfDays: parseInt(data.numberOfDays, 10),
+    totalCost: parseFloat(data.totalCost),
     predictedTotalCost: parseFloat(data.predictedTotalCost),
     totalKwh: parseFloat(data.totalKwh),
     userId: user?.uuid,
     updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
+
+  console.log(reportData);
 
   if (!reportExists) {
     console.log("Inserting new report.");
