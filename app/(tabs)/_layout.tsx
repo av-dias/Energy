@@ -1,12 +1,12 @@
 import React from "react";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Link, Tabs } from "expo-router";
-import { Pressable, View } from "react-native";
+import { Tabs } from "expo-router";
 
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import Feather from "@expo/vector-icons/Feather";
+import { Entypo } from "@expo/vector-icons";
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -34,6 +34,15 @@ export default function TabLayout() {
           title: "Insight",
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="data-usage" size={24} color="lightblue" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="simulation"
+        options={{
+          title: "Simulation",
+          tabBarIcon: ({ color }) => (
+            <Entypo name="calculator" size={24} color="lightblue" />
           ),
         }}
       />

@@ -95,7 +95,6 @@ export default function TabOneScreen() {
       async function fetchData() {
         setLoading(true);
         const reports = getAllMonthlyReports(db);
-        console.log(reports);
 
         const user = getUser();
 
@@ -119,6 +118,14 @@ export default function TabOneScreen() {
                         averageCost
                         numberOfDays
                         predictedTotalCost
+                        totalDayCost
+                        totalPeakCost
+                        totalNightCost
+                        totalDayKwh
+                        totalPeakKwh
+                        totalNightKwh
+                        ascFee
+                        psoFee
                         createdAt
                       }
                     }
@@ -128,7 +135,7 @@ export default function TabOneScreen() {
 
         if (report) {
           const data = await report?.json();
-          console.log(data);
+
           if (data.data.getMonthlyReport != null) {
             setTotalKwh(data.data.getMonthlyReport.totalKwh);
             setAverageCost(data.data.getMonthlyReport.averageCost.toFixed(2));
@@ -138,7 +145,9 @@ export default function TabOneScreen() {
               prediction: data.data.getMonthlyReport.predictedTotalCost,
             });
 
-            updateMonthlyReport(
+            console.log(data.data.getMonthlyReport);
+
+            await updateMonthlyReport(
               db,
               month + 1,
               year,
@@ -150,7 +159,16 @@ export default function TabOneScreen() {
                 totalCost: data.data.getMonthlyReport.totalCost,
                 predictedTotalCost:
                   data.data.getMonthlyReport.predictedTotalCost,
+                fees:
+                  (data.data.getMonthlyReport.ascFee || 0) +
+                  (data.data.getMonthlyReport.psoFee || 0),
                 totalKwh: data.data.getMonthlyReport.totalKwh,
+                totalDayCost: data.data.getMonthlyReport.totalDayCost,
+                totalPeakCost: data.data.getMonthlyReport.totalPeakCost,
+                totalNightCost: data.data.getMonthlyReport.totalNightCost,
+                totalDayKwh: data.data.getMonthlyReport.totalDayKwh,
+                totalPeakKwh: data.data.getMonthlyReport.totalPeakKwh,
+                totalNightKwh: data.data.getMonthlyReport.totalNightKwh,
               },
               user?.email ?? ""
             );
@@ -170,7 +188,6 @@ export default function TabOneScreen() {
 
       async function getDbData() {
         const reports = getAllMonthlyReports(db);
-        console.log(reports);
 
         const user = getUser();
 

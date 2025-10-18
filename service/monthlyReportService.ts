@@ -36,7 +36,7 @@ const getMonthlyReportByMonth = (
   return result;
 };
 
-const updateMonthlyReport = (
+const updateMonthlyReport = async (
   db: ExpoSQLiteDatabase<Record<string, never>> & {
     $client: SQLiteDatabase;
   },
@@ -69,16 +69,24 @@ const updateMonthlyReport = (
     userId: user?.uuid,
     updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
+    fees: parseFloat(data.fees),
+    totalDayCost: parseFloat(data.totalDayCost),
+    totalDayKwh: parseFloat(data.totalDayKwh),
+    totalNightCost: parseFloat(data.totalNightCost),
+    totalNightKwh: parseFloat(data.totalNightKwh),
+    totalPeakKwh: parseFloat(data.totalPeakKwh),
+    totalPeakCost: parseFloat(data.totalPeakCost),
   };
 
   console.log(reportData);
 
   if (!reportExists) {
     console.log("Inserting new report.");
-    db.insert(monthlyReports).values(reportData).run();
+    await db.insert(monthlyReports).values(reportData).run();
   } else {
     console.log("Updating already existing report.");
-    db.update(monthlyReports)
+    await db
+      .update(monthlyReports)
       .set(reportData)
       .where(eq(monthlyReports.id, reportExists.id))
       .run();
@@ -93,9 +101,24 @@ const deleteAllMonthlyReports = (
   return db.delete(monthlyReports).run();
 };
 
+const updateMonthlyReportFees = (
+  db: ExpoSQLiteDatabase<Record<string, never>> & {
+    $client: SQLiteDatabase;
+  },
+  reportId: string,
+  fees: number
+) => {
+  return db
+    .update(monthlyReports)
+    .set({ fees: fees })
+    .where(eq(monthlyReports.id, reportId))
+    .run();
+};
+
 export {
   getMonthlyReportByMonth,
   updateMonthlyReport,
   getAllMonthlyReports,
   deleteAllMonthlyReports,
+  updateMonthlyReportFees,
 };

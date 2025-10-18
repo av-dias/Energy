@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // Define the user table schema using drizzle-orm
 export const users = sqliteTable("users", {
@@ -19,6 +19,12 @@ export const users = sqliteTable("users", {
 
   // `baseUrl` column for a user-specific base URL
   baseUrl: text("baseUrl").notNull(),
+
+  // `annualPSO` column to store the annual PSO value
+  annualPSO: real("annualPSO").notNull().default(0),
+
+  // `annualASC` column to store the annual ASC value
+  annualASC: real("annualASC").notNull().default(0),
 
   // `updatedDate` column to store the date of the last update
   updatedDate: text("updatedDate").notNull(),

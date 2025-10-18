@@ -91,10 +91,30 @@ const updateUUIDForUserByEmail = (
   }
 };
 
+const updateFeesForUserByEmail = (
+  db: ExpoSQLiteDatabase<Record<string, never>> & {
+    $client: SQLiteDatabase;
+  },
+  email: string,
+  asc: number,
+  pso: number
+) => {
+  try {
+    return db
+      .update(users)
+      .set({ annualASC: asc, annualPSO: pso })
+      .where(eq(users.email, email))
+      .run();
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 export {
   getAllUsers,
   getUserByEmail,
   insertOneUser,
   updateBaseUrlForUserByEmail,
   updateUUIDForUserByEmail,
+  updateFeesForUserByEmail,
 };
