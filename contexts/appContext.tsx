@@ -1,6 +1,8 @@
+import { createNotification } from "@/components/notificationBox/NotificationBox";
 import { getDatabase } from "@/db/client";
 import { fetchWithTimeout } from "@/service/serviceUtils";
 import { updateUUIDForUserByEmail } from "@/service/userService";
+import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
 import { useFocusEffect } from "@react-navigation/native";
 import React, {
   Dispatch,
@@ -66,6 +68,10 @@ const AppContextProvider = ({ children }: { children: any }) => {
 
         if (!user) {
           console.log("No response from server - User registry");
+          eventEmitter.emit(
+            NotificationEvent,
+            createNotification("No response from server.", "gray")
+          );
           return;
         } else if (user.data.getUser) {
           console.log(`User ${user.data.getUser.email} already registered.`);
