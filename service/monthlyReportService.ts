@@ -1,8 +1,10 @@
 import { monthlyReports } from "@/db/schemas/monthlyReports";
 import { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { SQLiteDatabase } from "expo-sqlite";
-import { eq, and } from "drizzle-orm";
+import { eq, and, like } from "drizzle-orm";
 import { getUserByEmail } from "./userService";
+import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
+import { createNotification } from "@/components/notificationBox/NotificationBox";
 
 const getAllMonthlyReports = (
   db: ExpoSQLiteDatabase<Record<string, never>> & {
@@ -36,6 +38,27 @@ const getMonthlyReportByMonth = (
   return result;
 };
 
+const getReportsFromYear = (
+  db: ExpoSQLiteDatabase<Record<string, never>> & {
+    $client: SQLiteDatabase;
+  },
+  userId: string,
+  year: number
+) => {
+  const result = db
+    .select()
+    .from(monthlyReports)
+    .where(
+      and(
+        eq(monthlyReports.userId, userId),
+        like(monthlyReports.month, `${year}-%`)
+      )
+    )
+    .all();
+
+  return result;
+};
+
 const updateMonthlyReport = async (
   db: ExpoSQLiteDatabase<Record<string, never>> & {
     $client: SQLiteDatabase;
@@ -46,12 +69,23 @@ const updateMonthlyReport = async (
   email: string
 ) => {
   if (!email) {
-    console.log("No user provided, cannot update monthly report");
+    console.log("No user provided, cannot update monthly report.");
+    eventEmitter.emit(
+      NotificationEvent,
+      createNotification(
+        "No user provided, cannot update monthly report.",
+        "pink"
+      )
+    );
     return;
   }
 
   const user = getUserByEmail(db, email);
   if (!user || !user.uuid) {
+    eventEmitter.emit(
+      NotificationEvent,
+      createNotification("No user found, cannot update monthly report.", "pink")
+    );
     console.log("No user found, cannot update monthly report");
     return;
   }
@@ -69,7 +103,7 @@ const updateMonthlyReport = async (
     userId: user?.uuid,
     updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
-    fees: parseFloat(data.fees),
+    fees: parseFloat(data.ascFee || 0) + parseFloat(data.psoFee || 0),
     totalDayCost: parseFloat(data.totalDayCost),
     totalDayKwh: parseFloat(data.totalDayKwh),
     totalNightCost: parseFloat(data.totalNightCost),
@@ -121,4 +155,5 @@ export {
   getAllMonthlyReports,
   deleteAllMonthlyReports,
   updateMonthlyReportFees,
+  getReportsFromYear,
 };
