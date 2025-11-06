@@ -11,7 +11,7 @@ const UsableScreen: React.FC<PropsWithChildren> = (props) => {
     <View
       style={{
         flex: 1,
-        padding: 50,
+        padding: 40,
         gap: 10,
         backgroundColor: color.light.background,
       }}

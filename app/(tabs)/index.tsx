@@ -1,24 +1,38 @@
 import { StyleSheet } from "react-native";
-
 import { Text, View } from "@/components/Themed";
 import { BarChart } from "react-native-gifted-charts";
-import { MONTHS_LONG } from "@/utility/calendar";
+import { daysTillEndOfMonth, MONTHS_LONG } from "@/utility/calendar";
 import { useCallback, useContext, useState } from "react";
 import { AppContext } from "@/contexts/appContext";
 import UsableScreen from "@/components/usableScreen";
 import { useFocusEffect } from "expo-router";
 import CustomPressable from "@/components/customPressable";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import color from "@/constants/color";
 import {
-  deleteAllMonthlyReports,
-  getAllMonthlyReports,
   getMonthlyReportByMonth,
   updateMonthlyReport,
 } from "@/service/monthlyReportService";
 import { getDatabase } from "@/db/client";
 import { getUserByEmail } from "@/service/userService";
-import { fetchWithTimeout } from "@/service/serviceUtils";
+import ServerHeader from "@/components/serverHeader";
+import LoadingIndicator from "@/components/loadingIndicator";
+import { getMonthlyReport } from "@/requests/report";
+import { healthCheck } from "@/requests/server";
+import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
+import {
+  createNotification,
+  NotificationBox,
+} from "@/components/notificationBox/NotificationBox";
+
+const TopLabelComponent = ({ value, color }: any) => {
+  return (
+    <Text>
+      <Text style={{ color: color, fontSize: 12, marginBottom: 6 }}>
+        {value}
+      </Text>
+      <Text style={{ color: color, fontSize: 9, marginBottom: 6 }}>{`€`}</Text>
+    </Text>
+  );
+};
 
 export default function TabOneScreen() {
   /* Dev Zone Start */
@@ -39,27 +53,6 @@ export default function TabOneScreen() {
   const [loading, setLoading] = useState(false);
   const db = getDatabase();
 
-  const LoadingIndicator = () => (
-    <View style={{ backgroundColor: "transparent", padding: 10 }}>
-      <Text>Loading...</Text>
-    </View>
-  );
-
-  const daysTillEndOfMonth = () => {
-    const today = new Date();
-    const endOfMonth = new Date(
-      new Date().getFullYear(),
-      month + 1,
-      0
-    ).getDate();
-
-    if (today.getMonth() > month) {
-      return 0;
-    } else {
-      return endOfMonth - today.getDate();
-    }
-  };
-
   const getUser = () => {
     const user = getUserByEmail(db, email);
     return user;
@@ -68,19 +61,12 @@ export default function TabOneScreen() {
   const triggerRefresh = async () => {
     setRefresh((prev) => !prev);
 
-    try {
-      const response = await fetchWithTimeout(
-        `http://${server}:8080/api/v1/health`
-      );
-
-      const data = await response?.json();
-      if (data) {
-        setIsServerOnline(true);
-      } else {
-        setIsServerOnline(false);
-      }
-    } catch (error) {
-      console.error("Error fetching server health:", error);
+    const response = await healthCheck(server);
+    const data = await response?.json();
+    if (data) {
+      setIsServerOnline(true);
+    } else {
+      setIsServerOnline(false);
     }
   };
 
@@ -94,44 +80,18 @@ export default function TabOneScreen() {
     useCallback(() => {
       async function fetchData() {
         setLoading(true);
-        const reports = getAllMonthlyReports(db);
-
         const user = getUser();
 
-        const report = await fetchWithTimeout(`http://${server}:8080/graphql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: `
-                    {
-                      getMonthlyReport(
-                        userId: "${user?.uuid}"
-                        month: ${month + 1}
-                        year: ${year}
-                      ) {
-                        id
-                        month
-                        totalKwh
-                        totalCost
-                        averageCost
-                        numberOfDays
-                        predictedTotalCost
-                        totalDayCost
-                        totalPeakCost
-                        totalNightCost
-                        totalDayKwh
-                        totalPeakKwh
-                        totalNightKwh
-                        ascFee
-                        psoFee
-                        createdAt
-                      }
-                    }
-            `,
-          }),
-        });
+        if (!user || !user?.uuid) {
+          eventEmitter.emit(
+            NotificationEvent,
+            createNotification("No user found.", "pink")
+          );
+          setLoading(false);
+          return;
+        }
+
+        const report = await getMonthlyReport(user, month, year, server);
 
         if (report) {
           const data = await report?.json();
@@ -145,31 +105,11 @@ export default function TabOneScreen() {
               prediction: data.data.getMonthlyReport.predictedTotalCost,
             });
 
-            console.log(data.data.getMonthlyReport);
-
             await updateMonthlyReport(
               db,
               month + 1,
               year,
-              {
-                id: data.data.getMonthlyReport.id,
-                averageCost: data.data.getMonthlyReport.averageCost,
-                month: data.data.getMonthlyReport.month,
-                numberOfDays: data.data.getMonthlyReport.numberOfDays,
-                totalCost: data.data.getMonthlyReport.totalCost,
-                predictedTotalCost:
-                  data.data.getMonthlyReport.predictedTotalCost,
-                fees:
-                  (data.data.getMonthlyReport.ascFee || 0) +
-                  (data.data.getMonthlyReport.psoFee || 0),
-                totalKwh: data.data.getMonthlyReport.totalKwh,
-                totalDayCost: data.data.getMonthlyReport.totalDayCost,
-                totalPeakCost: data.data.getMonthlyReport.totalPeakCost,
-                totalNightCost: data.data.getMonthlyReport.totalNightCost,
-                totalDayKwh: data.data.getMonthlyReport.totalDayKwh,
-                totalPeakKwh: data.data.getMonthlyReport.totalPeakKwh,
-                totalNightKwh: data.data.getMonthlyReport.totalNightKwh,
-              },
+              data.data.getMonthlyReport,
               user?.email ?? ""
             );
           } else {
@@ -187,8 +127,6 @@ export default function TabOneScreen() {
       }
 
       async function getDbData() {
-        const reports = getAllMonthlyReports(db);
-
         const user = getUser();
 
         const report = getMonthlyReportByMonth(
@@ -217,14 +155,7 @@ export default function TabOneScreen() {
       value: data.today,
       label: "Today",
       topLabelComponent: () => (
-        <Text>
-          <Text style={{ color: "gray", fontSize: 12, marginBottom: 6 }}>
-            {data.today}
-          </Text>
-          <Text
-            style={{ color: "gray", fontSize: 9, marginBottom: 6 }}
-          >{`€`}</Text>
-        </Text>
+        <TopLabelComponent value={data.today} color="gray" />
       ),
     },
     {
@@ -232,52 +163,17 @@ export default function TabOneScreen() {
       label: "Predicted",
       frontColor: "#177AD5",
       topLabelComponent: () => (
-        <Text>
-          <Text style={{ color: "#177AD5", fontSize: 12, marginBottom: 6 }}>
-            {data.prediction}
-          </Text>
-          <Text
-            style={{ color: "#177AD5", fontSize: 9, marginBottom: 6 }}
-          >{`€`}</Text>
-        </Text>
+        <TopLabelComponent value={data.prediction} color="#177AD5" />
       ),
     },
   ];
 
   return (
     <UsableScreen>
-      <View
-        style={{
-          backgroundColor: color.light.grayBlur,
-          position: "absolute",
-          top: 40,
-          right: 10,
-          padding: 5,
-          borderRadius: 5,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
-        }}
-      >
-        <Text style={{ fontSize: 10 }}>{`${email.split("@")[0]}`}</Text>
-        <View style={{ backgroundColor: "transparent" }}>
-          <FontAwesome
-            name="circle"
-            size={10}
-            color={isServerOnline ? "green" : "red"}
-          />
-        </View>
-      </View>
+      <NotificationBox />
+      <ServerHeader email={email} isServerOnline={isServerOnline} />
       <View style={styles.container}>
-        <View
-          style={{
-            alignItems: "center",
-            gap: 5,
-            backgroundColor: "transparent",
-            flexDirection: "row",
-            justifyContent: "center",
-          }}
-        >
+        <View style={styles.calendarContainer}>
           <CustomPressable
             color={"lightblue"}
             text={"-"}
@@ -294,31 +190,17 @@ export default function TabOneScreen() {
             onPress={() => setMonth(month + 1)}
           />
         </View>
-        <Text
-          style={styles.subtitle}
-        >{`${daysTillEndOfMonth()} days till end of month`}</Text>
+        <Text style={styles.subtitle}>{`${daysTillEndOfMonth(
+          month
+        )} days till end of month`}</Text>
         <Text style={styles.server}>{`http://${server}:8080/graphql`}</Text>
         <View
           style={styles.separator}
           lightColor="#eee"
           darkColor="rgba(255,255,255,0.1)"
         />
-        <View
-          style={{
-            paddingBottom: 20,
-            alignItems: "center",
-            gap: 5,
-            backgroundColor: "transparent",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: "lightblue",
-              borderRadius: 10,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-            }}
-          >
+        <View style={styles.chartHeader}>
+          <View style={styles.chartHeaderItem}>
             <Text style={{ color: "black" }}>{`${totalKwh} kWh`}</Text>
           </View>
           <View
@@ -329,13 +211,7 @@ export default function TabOneScreen() {
             >{`${daysAnalysed} days analysed`}</Text>
           </View>
         </View>
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            backgroundColor: "transparent",
-          }}
-        >
+        <View style={styles.chartContainer}>
           <BarChart
             barWidth={50}
             initialSpacing={100}
@@ -351,7 +227,7 @@ export default function TabOneScreen() {
             hideYAxisText
           />
         </View>
-        {loading && <LoadingIndicator />}
+        <LoadingIndicator isLoading={loading} />
         <View style={{ backgroundColor: "transparent", paddingBottom: 10 }}>
           <CustomPressable
             color={"lightblue"}
@@ -392,6 +268,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "transparent",
   },
+  calendarContainer: {
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "transparent",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
   title: {
     fontSize: 20,
     fontWeight: "bold",
@@ -411,5 +294,22 @@ const styles = StyleSheet.create({
     marginVertical: 30,
     height: 1,
     width: "80%",
+  },
+  chartHeader: {
+    paddingBottom: 20,
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "transparent",
+  },
+  chartHeaderItem: {
+    backgroundColor: "lightblue",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  chartContainer: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: "transparent",
   },
 });
