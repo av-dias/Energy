@@ -7,6 +7,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import Feather from "@expo/vector-icons/Feather";
 import { Entypo } from "@expo/vector-icons";
+import { NotificationBox } from "@/components/notificationBox/NotificationBox";
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -34,6 +35,15 @@ export default function TabLayout() {
           title: "Insight",
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="data-usage" size={24} color="lightblue" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="statistics"
+        options={{
+          title: "Statistics",
+          tabBarIcon: ({ color }) => (
+            <Entypo name="bar-graph" size={24} color="lightblue" />
           ),
         }}
       />
