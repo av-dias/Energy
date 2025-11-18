@@ -1,6 +1,10 @@
 import { StyleSheet } from "react-native";
 import { Text, View } from "@/components/Themed";
-import { BarChart } from "react-native-gifted-charts";
+import {
+  BarChart,
+  barDataItem,
+  stackDataItem,
+} from "react-native-gifted-charts";
 import { daysTillEndOfMonth, MONTHS_LONG } from "@/utility/calendar";
 import { useCallback, useContext, useState } from "react";
 import { AppContext } from "@/contexts/appContext";
@@ -15,21 +19,32 @@ import { getDatabase } from "@/db/client";
 import { getUserByEmail } from "@/service/userService";
 import ServerHeader from "@/components/serverHeader";
 import LoadingIndicator from "@/components/loadingIndicator";
-import { getMonthlyReport } from "@/requests/report";
+import { getDailyReport, getMonthlyReport } from "@/requests/report";
 import { healthCheck } from "@/requests/server";
 import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
 import {
   createNotification,
   NotificationBox,
 } from "@/components/notificationBox/NotificationBox";
+import { FontAwesome } from "@expo/vector-icons";
+import color from "@/constants/color";
+import { DailyReport } from "@/models/response/DailyReportType";
+import { verticalScale } from "@/utility/responsive";
+import {
+  getDailyReportByMonth,
+  updateDailyReport,
+} from "@/service/dailyReportService";
+const db = getDatabase();
 
-const TopLabelComponent = ({ value, color }: any) => {
+const TopLabelComponent = ({ value, color, size = 12 }: any) => {
   return (
     <Text>
-      <Text style={{ color: color, fontSize: 12, marginBottom: 6 }}>
+      <Text style={{ color: color, fontSize: size, marginBottom: 6 }}>
         {value}
       </Text>
-      <Text style={{ color: color, fontSize: 9, marginBottom: 6 }}>{`€`}</Text>
+      <Text
+        style={{ color: color, fontSize: size - 3, marginBottom: 6 }}
+      >{`€`}</Text>
     </Text>
   );
 };
@@ -46,12 +61,12 @@ export default function TabOneScreen() {
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const [totalKwh, setTotalKwh] = useState(0);
-  const [data, setBarData] = useState({ today: 0, prediction: 0 });
+  const [monthlyData, setMonthlyData] = useState({ today: 0, prediction: 0 });
+  const [dailyReportData, setDailyReportData] = useState<DailyReport[]>([]);
   const [averageCost, setAverageCost] = useState(0);
   const [daysAnalysed, setDaysAnalysed] = useState(0);
   const [refresh, setRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
-  const db = getDatabase();
 
   const getUser = () => {
     const user = getUserByEmail(db, email);
@@ -91,16 +106,17 @@ export default function TabOneScreen() {
           return;
         }
 
-        const report = await getMonthlyReport(user, month, year, server);
+        const monthlyReport = await getMonthlyReport(user, month, year, server);
 
-        if (report) {
-          const data = await report?.json();
+        // MONTHLY REPORT
+        if (monthlyReport) {
+          const data = await monthlyReport?.json();
 
           if (data.data.getMonthlyReport != null) {
             setTotalKwh(data.data.getMonthlyReport.totalKwh);
             setAverageCost(data.data.getMonthlyReport.averageCost.toFixed(2));
             setDaysAnalysed(data.data.getMonthlyReport.numberOfDays);
-            setBarData({
+            setMonthlyData({
               today: data.data.getMonthlyReport.totalCost,
               prediction: data.data.getMonthlyReport.predictedTotalCost,
             });
@@ -116,10 +132,37 @@ export default function TabOneScreen() {
             setTotalKwh(0);
             setAverageCost(0);
             setDaysAnalysed(0);
-            setBarData({
+            setMonthlyData({
               today: 0,
               prediction: 0,
             });
+          }
+        }
+
+        // DAILY REPORT
+        const dailyReportList = await getDailyReport(user, month, year, server);
+
+        if (dailyReportList) {
+          const data = await dailyReportList?.json();
+
+          if (data.data.getDailyReports != null) {
+            const dailyReportRes: DailyReport[] = data.data.getDailyReports;
+            setDailyReportData(data.data.getDailyReports);
+
+            for (let report of dailyReportRes) {
+              let date = new Date(report.date.toString());
+              await updateDailyReport(
+                db,
+                date.getFullYear(),
+                date.getMonth() + 1,
+                date.getDate(),
+                report,
+                email
+              );
+            }
+          } else {
+            console.log("Error fetching daily report list.");
+            setDailyReportData([]);
           }
         }
 
@@ -139,10 +182,33 @@ export default function TabOneScreen() {
         setTotalKwh(report?.totalKwh || 0);
         setAverageCost(Number(report?.averageCost?.toFixed(2)) || 0);
         setDaysAnalysed(report?.numberOfDays || 0);
-        setBarData({
+        setMonthlyData({
           today: report?.totalCost || 0,
           prediction: report?.predictedTotalCost || 0,
         });
+
+        const dailyReportEntity: any[] = getDailyReportByMonth(
+          db,
+          user?.uuid ?? "",
+          year,
+          month + 1
+        );
+
+        const dailyReport: DailyReport[] = dailyReportEntity?.map((entity) => ({
+          id: entity.id,
+          date: entity.date,
+          dayCost: entity.dayCost,
+          peakCost: entity.peakCost,
+          nightCost: entity.nightCost,
+          peakKwh: entity.peakKwh,
+          nightKwh: entity.nightKwh,
+          dayKwh: entity.dayKwh,
+          totalCost: entity.totalCost,
+          totalKwh: entity.totalKwh,
+          isSpike: entity.isSpike,
+        }));
+
+        setDailyReportData(dailyReport);
       }
 
       if (isServerOnline) fetchData();
@@ -152,21 +218,57 @@ export default function TabOneScreen() {
 
   const barData = [
     {
-      value: data.today,
-      label: "Today",
+      value: monthlyData.today,
       topLabelComponent: () => (
-        <TopLabelComponent value={data.today} color="gray" />
+        <TopLabelComponent value={monthlyData.today} color="gray" />
       ),
     },
     {
-      value: data.prediction,
-      label: "Predicted",
+      value: monthlyData.prediction,
       frontColor: "#177AD5",
       topLabelComponent: () => (
-        <TopLabelComponent value={data.prediction} color="#177AD5" />
+        <TopLabelComponent value={monthlyData.prediction} color="#177AD5" />
       ),
     },
   ];
+
+  const loadDailyReportBar = (): {
+    data: stackDataItem[];
+    maxValue: number;
+  } => {
+    if (!dailyReportData || dailyReportData.length == 0) {
+      return { data: [], maxValue: 0 };
+    }
+
+    const sortedDailyList = dailyReportData
+      .sort(
+        (d1, d2) =>
+          new Date(String(d1.date)).getDate() -
+          new Date(String(d2.date)).getDate()
+      )
+      .map((d) => ({
+        stacks: [
+          { value: Number(d.peakCost), color: "pink" },
+          { value: Number(d.dayCost), color: "#177AD5" },
+          { value: Number(d.nightCost), color: "lightblue" },
+        ],
+        label: new Date(String(d.date)).getDate().toString(),
+        topLabelComponent: () => (
+          <TopLabelComponent
+            value={Number(d?.totalCost.toFixed(1) ?? 0)}
+            color={d?.isSpike ? "red" : "gray"}
+            size={10}
+          />
+        ),
+      }));
+
+    // find highest cost value
+    const maxValue = dailyReportData?.sort(
+      (d1, d2) => Number(d2.dayCost) - Number(d1.dayCost)
+    )[0].totalCost;
+
+    return { data: sortedDailyList, maxValue: Number(maxValue) };
+  };
 
   return (
     <UsableScreen>
@@ -211,50 +313,115 @@ export default function TabOneScreen() {
             >{`${daysAnalysed} days analysed`}</Text>
           </View>
         </View>
-        <View style={styles.chartContainer}>
+        <View style={styles.horizontalChartContainer}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-evenly",
+              backgroundColor: "transparent",
+              width: "100%",
+              padding: 10,
+            }}
+          >
+            <View style={styles.chartLegend}>
+              <FontAwesome name="circle" size={10} color="lightgray" />
+              <Text style={styles.text}>Today</Text>
+            </View>
+            <View style={styles.chartLegend}>
+              <FontAwesome name="circle" size={10} color="#177AD5" />
+              <Text style={styles.text}>Predict</Text>
+            </View>
+          </View>
           <BarChart
-            barWidth={50}
-            initialSpacing={100}
+            horizontal
+            width={320}
+            height={50}
+            barWidth={20}
+            initialSpacing={0}
             noOfSections={2}
             barBorderRadius={4}
             frontColor="lightgray"
+            topLabelContainerStyle={{
+              marginTop: -5,
+            }}
             data={barData}
             yAxisThickness={0}
             xAxisThickness={0}
-            maxValue={data.prediction * 1.15}
-            spacing={40}
+            maxValue={monthlyData.prediction * 1.25}
+            shiftX={-50}
+            shiftY={-30}
+            spacing={15}
             hideRules
             hideYAxisText
           />
         </View>
-        <LoadingIndicator isLoading={loading} />
-        <View style={{ backgroundColor: "transparent", paddingBottom: 10 }}>
-          <CustomPressable
-            color={"lightblue"}
-            text={"Refresh"}
-            onPress={triggerRefresh}
-            padding={10}
+        <View
+          style={[styles.separator, { marginVertical: 5 }]}
+          lightColor="#eee"
+          darkColor="rgba(255,255,255,0.1)"
+        />
+        <View style={styles.chartContainer}>
+          <BarChart
+            height={verticalScale(200)}
+            barWidth={25}
+            initialSpacing={0}
+            noOfSections={2}
+            barBorderRadius={2}
+            frontColor="lightgray"
+            xAxisLabelTextStyle={{
+              width: 25,
+              justifyContent: "center",
+              textAlign: "center",
+              fontSize: 10,
+              color: "gray",
+            }}
+            stackData={loadDailyReportBar().data}
+            yAxisThickness={0}
+            xAxisThickness={0}
+            maxValue={loadDailyReportBar().maxValue * 1.1}
+            spacing={20}
+            hideRules
+            hideYAxisText
+            scrollToEnd
           />
         </View>
         <View
           style={{
+            height: verticalScale(100),
             backgroundColor: "transparent",
             alignContent: "center",
+            justifyContent: "flex-end",
+            gap: 5,
           }}
         >
-          <Text style={{ textAlign: "center" }}>
-            <Text
-              style={{ color: "gray" }}
-            >{`Average daily cost: ${averageCost}`}</Text>
-            <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
-          </Text>
-          <Text style={{ textAlign: "center" }}>
-            <Text style={{ color: "gray" }}>{`Total cost without fees: ${(
-              averageCost * daysAnalysed
-            ).toFixed(2)}`}</Text>
-            <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
-          </Text>
+          <View
+            style={{ backgroundColor: "transparent", alignItems: "center" }}
+          >
+            <CustomPressable
+              color={"lightblue"}
+              text={"Refresh"}
+              onPress={triggerRefresh}
+              padding={10}
+            />
+          </View>
+          <View
+            style={{ backgroundColor: "transparent", alignItems: "center" }}
+          >
+            <Text style={{ textAlign: "center" }}>
+              <Text
+                style={{ color: "gray" }}
+              >{`Average daily cost: ${averageCost}`}</Text>
+              <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
+            </Text>
+            <Text style={{ textAlign: "center" }}>
+              <Text style={{ color: "gray" }}>{`Total cost without fees: ${(
+                averageCost * daysAnalysed
+              ).toFixed(2)}`}</Text>
+              <Text style={{ fontSize: 10, color: "gray" }}>{`€`}</Text>
+            </Text>
+          </View>
         </View>
+        <LoadingIndicator isLoading={loading} />
       </View>
     </UsableScreen>
   );
@@ -290,8 +457,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "gray",
   },
+  chartLegend: {
+    gap: 3,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
   separator: {
-    marginVertical: 30,
+    marginVertical: 10,
     height: 1,
     width: "80%",
   },
@@ -307,9 +481,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  chartContainer: {
-    flex: 1,
-    alignItems: "center",
-    backgroundColor: "transparent",
+  horizontalChartContainer: {
+    width: "100%",
+    maxHeight: 150,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: color.light.grayBlur,
+    alignItems: "flex-start",
   },
+  chartContainer: {
+    width: "100%",
+    maxHeight: 300,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: color.light.grayBlur,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  text: { color: color.light.textPrimary },
 });

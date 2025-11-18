@@ -112,13 +112,11 @@ const updateMonthlyReport = async (
     totalPeakCost: parseFloat(data.totalPeakCost),
   };
 
-  console.log(reportData);
-
   if (!reportExists) {
-    console.log("Inserting new report.");
+    console.log(`Monthly: Inserting new report ${data.month}.`);
     await db.insert(monthlyReports).values(reportData).run();
   } else {
-    console.log("Updating already existing report.");
+    console.log(`Monthly: Updating already existing report ${data.month}.`);
     await db
       .update(monthlyReports)
       .set(reportData)
