@@ -2,39 +2,47 @@ import { users } from "@/db/schemas/users";
 import { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { SQLiteDatabase } from "expo-sqlite";
 import { eq } from "drizzle-orm";
+import { SQLJsDatabase } from "drizzle-orm/sql-js";
 
-const getAllUsers = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  }
-) => {
+const getAllUsers = (db: SQLJsDatabase | ExpoSQLiteDatabase | null) => {
   // Drizzle ORM's queries are async, wrap in Promise for expo-sqlite
   try {
+    if (!db) return [];
     return db.select().from(users).all();
   } catch (error) {
     console.log(error);
   }
 };
 
-const getUserByEmail = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+const getUserByEmail = async (
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   email: string
 ) => {
   try {
-    return db.select().from(users).where(eq(users.email, email)).get();
+    if (!db) {
+      console.log("Database is null!");
+      return null;
+    }
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .execute();
+    return user[0];
   } catch (error) {
     console.log(error);
   }
 };
 
 const insertOneUser = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   email: string
 ) => {
+  if (!db) {
+    console.log("Database is null!");
+    return undefined;
+  }
+
   // Drizzle ORM's queries are async, wrap in Promise for expo-sqlite
   try {
     // Provide all required fields for the users table
@@ -56,12 +64,15 @@ const insertOneUser = (
 };
 
 const updateBaseUrlForUserByEmail = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   email: string,
   baseUrl: string
 ) => {
+  if (!db) {
+    console.log("Database is null!");
+    return undefined;
+  }
+
   try {
     return db
       .update(users)
@@ -74,12 +85,15 @@ const updateBaseUrlForUserByEmail = (
 };
 
 const updateUUIDForUserByEmail = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   email: string,
   UUID: string
 ) => {
+  if (!db) {
+    console.log("Database is null!");
+    return undefined;
+  }
+
   try {
     return db
       .update(users)
@@ -92,13 +106,16 @@ const updateUUIDForUserByEmail = (
 };
 
 const updateFeesForUserByEmail = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   email: string,
   asc: number,
   pso: number
 ) => {
+  if (!db) {
+    console.log("Database is null!");
+    return undefined;
+  }
+
   try {
     return db
       .update(users)

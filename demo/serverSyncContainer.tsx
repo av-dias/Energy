@@ -10,8 +10,7 @@ import { AppContext } from "../contexts/appContext";
 // Add color import or definition
 import color from "../constants/color";
 import { updateBaseUrlForUserByEmail } from "@/service/userService";
-import { getDatabase } from "@/db/client";
-
+import { DatabaseContext } from "@/contexts/dbContext";
 export const defaultServerIp = "192.168.";
 // Local IP Regex
 const localIPRegex: RegExp =
@@ -50,14 +49,13 @@ const fetchWithTimeout = (url: string, timeout = 5000): Promise<Response> =>
     new Promise<Response>((_, reject) => setTimeout(() => reject(), timeout)),
   ]);
 
-const db = getDatabase();
-
 export const ServerSyncContainer = () => {
   const {
     serverConfig,
     server: [isServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
+  const { db } = useContext(DatabaseContext);
   const [server, setServer] = serverConfig;
 
   const [serverSyncVisible, setServerSyncVisible] = useState(false);

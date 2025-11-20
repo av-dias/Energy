@@ -11,3 +11,5 @@
   - Statistics page
 - 1.3.0
   - Fetch and store daily report data
+- 1.4.0
+  - Improved drizzle sqlite stability with refined init

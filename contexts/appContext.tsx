@@ -1,5 +1,4 @@
 import { createNotification } from "@/components/notificationBox/NotificationBox";
-import { getDatabase } from "@/db/client";
 import { fetchWithTimeout } from "@/service/serviceUtils";
 import { updateUUIDForUserByEmail } from "@/service/userService";
 import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
@@ -9,9 +8,11 @@ import React, {
   SetStateAction,
   use,
   useCallback,
+  useContext,
   useState,
 } from "react";
 import { createContext } from "react";
+import { DatabaseContext } from "./dbContext";
 
 interface AppContext {
   serverConfig: [string, React.Dispatch<React.SetStateAction<string>>]; // Dev test only
@@ -29,7 +30,7 @@ const AppContextProvider = ({ children }: { children: any }) => {
   const [server, setServer] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
-  const db = getDatabase();
+  const { db } = useContext(DatabaseContext);
 
   const value: AppContext = {
     serverConfig: [server, setServer],

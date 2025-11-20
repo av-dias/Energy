@@ -12,6 +12,7 @@ import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
 import AppContextProvider from "@/contexts/appContext";
+import { DatabaseProvider } from "@/contexts/dbContext";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -55,12 +56,14 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <AppContextProvider>
-        <Stack initialRouteName="index">
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
-      </AppContextProvider>
+      <DatabaseProvider>
+        <AppContextProvider>
+          <Stack initialRouteName="index">
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </AppContextProvider>
+      </DatabaseProvider>
     </ThemeProvider>
   );
 }

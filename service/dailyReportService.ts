@@ -6,11 +6,10 @@ import { getUserByEmail } from "./userService";
 import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
 import { createNotification } from "@/components/notificationBox/NotificationBox";
 import { DailyReport } from "@/models/response/DailyReportType";
+import { SQLJsDatabase } from "drizzle-orm/sql-js";
 
-const getDailyReportByDate = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+const getDailyReportByDate = async (
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   userId: string,
   year: number,
   month: number,
@@ -21,7 +20,9 @@ const getDailyReportByDate = (
   const leftZeroDay = day < 10 ? `0` : "";
   const formatDay = `${leftZeroDay}${day}`;
 
-  const result = db
+  if (!db) return null;
+
+  const result = await db
     .select()
     .from(dailyReport)
     .where(
@@ -29,24 +30,22 @@ const getDailyReportByDate = (
         eq(dailyReport.userId, userId),
         like(dailyReport.date, `${year}-${formatMonth}-${formatDay}`)
       )
-    )
-    .get();
-
-  return result;
+    );
+  return result[0];
 };
 
-const getDailyReportByMonth = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+const getDailyReportByMonth = async (
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   userId: string,
   year: number,
   month: number
 ) => {
+  if (!db) return [];
+
   const leftZeroMonth = month < 10 ? `0` : "";
   const formatMonth = `${leftZeroMonth}${month}`;
 
-  const result = db
+  const result = await db
     .select()
     .from(dailyReport)
     .where(
@@ -54,22 +53,21 @@ const getDailyReportByMonth = (
         eq(dailyReport.userId, userId),
         like(dailyReport.date, `${year}-${formatMonth}-%`)
       )
-    )
-    .all();
+    );
 
   return result;
 };
 
 const updateDailyReport = async (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   year: number,
   month: number,
   day: number,
   data: DailyReport,
   email: string
 ) => {
+  if (!db) return null;
+
   if (!email) {
     console.log("No user provided, cannot update daily report.");
     eventEmitter.emit(
@@ -82,7 +80,7 @@ const updateDailyReport = async (
     return;
   }
 
-  const user = getUserByEmail(db, email);
+  const user = await getUserByEmail(db, email);
   if (!user || !user.uuid) {
     eventEmitter.emit(
       NotificationEvent,
@@ -92,7 +90,13 @@ const updateDailyReport = async (
     return;
   }
 
-  const reportExists = getDailyReportByDate(db, user?.uuid, year, month, day);
+  const reportExists = await getDailyReportByDate(
+    db,
+    user?.uuid,
+    year,
+    month,
+    day
+  );
 
   const dailyReportData = {
     id: String(data.id),
@@ -124,4 +128,35 @@ const updateDailyReport = async (
   }
 };
 
-export { getDailyReportByDate, getDailyReportByMonth, updateDailyReport };
+const deleteDailyReportMonth = async (
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
+  year: number,
+  month: number,
+  userId: string
+) => {
+  if (!db) return null;
+
+  const leftZeroMonth = month < 10 ? `0` : "";
+  const formatMonth = `${leftZeroMonth}${month}`;
+
+  const result = db
+    .delete(dailyReport)
+    .where(
+      and(
+        eq(dailyReport.userId, userId),
+        like(dailyReport.date, `${year}-${formatMonth}-%`)
+      )
+    )
+    .run();
+
+  console.log(`Deleted daily report where ${year}-${formatMonth}-%`);
+
+  return result;
+};
+
+export {
+  getDailyReportByDate,
+  getDailyReportByMonth,
+  updateDailyReport,
+  deleteDailyReportMonth,
+};

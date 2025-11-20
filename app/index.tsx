@@ -3,7 +3,6 @@ import React, { useCallback, useContext, useState } from "react";
 import { Text, View } from "@/components/Themed";
 import { StyleSheet } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { getDatabase } from "@/db/client";
 import {
   getAllUsers,
   getUserByEmail,
@@ -16,7 +15,7 @@ import AntDesign from "@expo/vector-icons/AntDesign";
 import EvilIcons from "@expo/vector-icons/EvilIcons";
 import CustomPressable from "@/components/customPressable";
 import { AppContext } from "@/contexts/appContext";
-const db = getDatabase();
+import { DatabaseContext } from "@/contexts/dbContext";
 
 /**
  * Login screen component
@@ -28,26 +27,23 @@ export default function LoginScreen() {
     serverConfig: [, setServer],
     userEmail: [, setEmail],
   } = useContext(AppContext);
+  const { db } = useContext(DatabaseContext);
+
   const [loading, setLoading] = useState(true);
   const [inputEmail, setInputEmail] = useState("");
   const [users, setUsers] = useState<any[] | undefined>(undefined);
-  const { success, error } = useMigrations(db, migrations);
 
-  console.log(success);
-
-  console.log(error);
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     console.log("Login pressed");
 
     // Check if user exists
-    const existingUser = getUserByEmail(db, inputEmail);
+    const existingUser = await getUserByEmail(db, inputEmail);
 
     // If user exists, log them in
     if (existingUser) {
       console.log("User exists:", existingUser);
       setEmail(inputEmail);
-      setServer(existingUser.baseUrl);
+      setServer(existingUser?.baseUrl);
       router.replace("/(tabs)");
     } else {
       // If user doesn't exist, create new user
@@ -67,7 +63,7 @@ export default function LoginScreen() {
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
-        const allUsers = getAllUsers(db);
+        const allUsers = await getAllUsers(db);
         setUsers(allUsers);
 
         if (allUsers && allUsers?.length > 0) {
@@ -79,8 +75,8 @@ export default function LoginScreen() {
         setLoading(false);
       }
 
-      if (success) fetchData();
-    }, [success])
+      if (db) fetchData();
+    }, [db])
   );
 
   return (

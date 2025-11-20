@@ -5,26 +5,27 @@ import { eq, and, like } from "drizzle-orm";
 import { getUserByEmail } from "./userService";
 import { eventEmitter, NotificationEvent } from "@/utility/eventEmitter";
 import { createNotification } from "@/components/notificationBox/NotificationBox";
+import { SQLJsDatabase } from "drizzle-orm/sql-js";
 
 const getAllMonthlyReports = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  }
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null
 ) => {
+  if (!db) return null;
+
   return db.select().from(monthlyReports).all();
 };
 
-const getMonthlyReportByMonth = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+const getMonthlyReportByMonth = async (
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   userId: string,
   month: number,
   year: number
 ) => {
+  if (!db) return null;
+
   const leftZero = month < 10 ? `0` : "";
   const targetDate = `${year}-${leftZero}${month}`;
-  const result = db
+  const result = await db
     .select()
     .from(monthlyReports)
     .where(
@@ -32,19 +33,18 @@ const getMonthlyReportByMonth = (
         eq(monthlyReports.userId, userId),
         eq(monthlyReports.month, targetDate)
       )
-    )
-    .get();
+    );
 
-  return result;
+  return result[0];
 };
 
 const getReportsFromYear = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   userId: string,
   year: number
 ) => {
+  if (!db) return [];
+
   const result = db
     .select()
     .from(monthlyReports)
@@ -60,14 +60,14 @@ const getReportsFromYear = (
 };
 
 const updateMonthlyReport = async (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  },
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null,
   month: number,
   year: number,
   data: any,
   email: string
 ) => {
+  if (!db) return null;
+
   if (!email) {
     console.log("No user provided, cannot update monthly report.");
     eventEmitter.emit(
@@ -80,7 +80,7 @@ const updateMonthlyReport = async (
     return;
   }
 
-  const user = getUserByEmail(db, email);
+  const user = await getUserByEmail(db, email);
   if (!user || !user.uuid) {
     eventEmitter.emit(
       NotificationEvent,
@@ -90,7 +90,12 @@ const updateMonthlyReport = async (
     return;
   }
 
-  const reportExists = getMonthlyReportByMonth(db, user?.uuid, month, year);
+  const reportExists = await getMonthlyReportByMonth(
+    db,
+    user?.uuid,
+    month,
+    year
+  );
 
   const reportData = {
     id: data.id,
@@ -117,8 +122,7 @@ const updateMonthlyReport = async (
     await db.insert(monthlyReports).values(reportData).run();
   } else {
     console.log(`Monthly: Updating already existing report ${data.month}.`);
-    await db
-      .update(monthlyReports)
+    db.update(monthlyReports)
       .set(reportData)
       .where(eq(monthlyReports.id, reportExists.id))
       .run();
@@ -126,10 +130,10 @@ const updateMonthlyReport = async (
 };
 
 const deleteAllMonthlyReports = (
-  db: ExpoSQLiteDatabase<Record<string, never>> & {
-    $client: SQLiteDatabase;
-  }
+  db: SQLJsDatabase | ExpoSQLiteDatabase | null
 ) => {
+  if (!db) return null;
+
   return db.delete(monthlyReports).run();
 };
 
@@ -140,6 +144,8 @@ const updateMonthlyReportFees = (
   reportId: string,
   fees: number
 ) => {
+  if (!db) return null;
+
   return db
     .update(monthlyReports)
     .set({ fees: fees })
