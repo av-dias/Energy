@@ -1,11 +1,7 @@
 import { StyleSheet } from "react-native";
 import { Text, View } from "@/components/Themed";
-import {
-  BarChart,
-  barDataItem,
-  stackDataItem,
-} from "react-native-gifted-charts";
-import { daysTillEndOfMonth, MONTHS_LONG } from "@/utility/calendar";
+import { BarChart, stackDataItem } from "react-native-gifted-charts";
+import { daysTillEndOfMonth } from "@/utility/calendar";
 import { useCallback, useContext, useState } from "react";
 import { AppContext } from "@/contexts/appContext";
 import UsableScreen from "@/components/usableScreen";
@@ -15,7 +11,6 @@ import {
   getMonthlyReportByMonth,
   updateMonthlyReport,
 } from "@/service/monthlyReportService";
-import { getDatabase } from "@/db/client";
 import { getUserByEmail } from "@/service/userService";
 import ServerHeader from "@/components/serverHeader";
 import LoadingIndicator from "@/components/loadingIndicator";
@@ -26,15 +21,20 @@ import {
   createNotification,
   NotificationBox,
 } from "@/components/notificationBox/NotificationBox";
-import { FontAwesome } from "@expo/vector-icons";
 import color from "@/constants/color";
-import { DailyReport } from "@/models/response/DailyReportType";
+import {
+  DailyReport,
+  dailyReportMapper,
+} from "@/models/response/DailyReportType";
 import { verticalScale } from "@/utility/responsive";
 import {
+  deleteDailyReportMonth,
   getDailyReportByMonth,
   updateDailyReport,
 } from "@/service/dailyReportService";
-const db = getDatabase();
+import Calendar from "@/components/calendar";
+import ChartLegend from "@/components/ChartLegend";
+import { DatabaseContext } from "@/contexts/dbContext";
 
 const TopLabelComponent = ({ value, color, size = 12 }: any) => {
   return (
@@ -49,6 +49,11 @@ const TopLabelComponent = ({ value, color, size = 12 }: any) => {
   );
 };
 
+type ChartDataType = {
+  data: stackDataItem[];
+  maxValue: number;
+};
+
 export default function TabOneScreen() {
   /* Dev Zone Start */
   const {
@@ -56,6 +61,7 @@ export default function TabOneScreen() {
     server: [isServerOnline, setIsServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
+  const { db } = useContext(DatabaseContext);
   const [server] = serverConfig;
   /* Dev Zone End */
   const [month, setMonth] = useState(new Date().getMonth());
@@ -63,15 +69,13 @@ export default function TabOneScreen() {
   const [totalKwh, setTotalKwh] = useState(0);
   const [monthlyData, setMonthlyData] = useState({ today: 0, prediction: 0 });
   const [dailyReportData, setDailyReportData] = useState<DailyReport[]>([]);
+  const [dailyReportChartData, setDailyReportChartData] =
+    useState<ChartDataType>({ data: [], maxValue: 0 });
   const [averageCost, setAverageCost] = useState(0);
   const [daysAnalysed, setDaysAnalysed] = useState(0);
+  const [dailyReportSelected, setDailyReportSelected] = useState<DailyReport>();
   const [refresh, setRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
-
-  const getUser = () => {
-    const user = getUserByEmail(db, email);
-    return user;
-  };
 
   const triggerRefresh = async () => {
     setRefresh((prev) => !prev);
@@ -95,7 +99,7 @@ export default function TabOneScreen() {
     useCallback(() => {
       async function fetchData() {
         setLoading(true);
-        const user = getUser();
+        const user = await getUserByEmail(db, email);
 
         if (!user || !user?.uuid) {
           eventEmitter.emit(
@@ -146,11 +150,27 @@ export default function TabOneScreen() {
           const data = await dailyReportList?.json();
 
           if (data.data.getDailyReports != null) {
-            const dailyReportRes: DailyReport[] = data.data.getDailyReports;
-            setDailyReportData(data.data.getDailyReports);
+            let dailyReportRes: DailyReport[] = data.data.getDailyReports;
+
+            dailyReportRes = dailyReportRes.sort(
+              (d1, d2) =>
+                new Date(d1.date.toString()).getDate() -
+                new Date(d2.date.toString()).getDate()
+            );
+
+            setDailyReportData(dailyReportRes);
+            setDailyReportChartData(loadDailyReportBar(dailyReportRes));
 
             for (let report of dailyReportRes) {
               let date = new Date(report.date.toString());
+
+              const existingReport = dailyReportData.find(
+                (d) => d.date == report.date
+              );
+
+              // Dont update if totalCost stayed unchanged
+              if (report.totalCost == existingReport?.totalCost) continue;
+
               await updateDailyReport(
                 db,
                 date.getFullYear(),
@@ -170,50 +190,48 @@ export default function TabOneScreen() {
       }
 
       async function getDbData() {
-        const user = getUser();
+        const user = await getUserByEmail(db, email);
 
-        const report = getMonthlyReportByMonth(
+        const monthlyReport = await getMonthlyReportByMonth(
           db,
           user?.uuid ?? "",
           month + 1,
           year
         );
 
-        setTotalKwh(report?.totalKwh || 0);
-        setAverageCost(Number(report?.averageCost?.toFixed(2)) || 0);
-        setDaysAnalysed(report?.numberOfDays || 0);
+        setTotalKwh(monthlyReport?.totalKwh || 0);
+        setAverageCost(Number(monthlyReport?.averageCost?.toFixed(2)) || 0);
+        setDaysAnalysed(monthlyReport?.numberOfDays || 0);
         setMonthlyData({
-          today: report?.totalCost || 0,
-          prediction: report?.predictedTotalCost || 0,
+          today: monthlyReport?.totalCost || 0,
+          prediction: monthlyReport?.predictedTotalCost || 0,
         });
 
-        const dailyReportEntity: any[] = getDailyReportByMonth(
+        const dailyReportEntity: any[] = await getDailyReportByMonth(
           db,
           user?.uuid ?? "",
           year,
           month + 1
         );
 
-        const dailyReport: DailyReport[] = dailyReportEntity?.map((entity) => ({
-          id: entity.id,
-          date: entity.date,
-          dayCost: entity.dayCost,
-          peakCost: entity.peakCost,
-          nightCost: entity.nightCost,
-          peakKwh: entity.peakKwh,
-          nightKwh: entity.nightKwh,
-          dayKwh: entity.dayKwh,
-          totalCost: entity.totalCost,
-          totalKwh: entity.totalKwh,
-          isSpike: entity.isSpike,
-        }));
+        let dailyReports: DailyReport[] =
+          dailyReportEntity?.map(dailyReportMapper);
 
-        setDailyReportData(dailyReport);
+        dailyReports = dailyReports.sort(
+          (d1, d2) =>
+            new Date(d1.date.toString()).getDate() -
+            new Date(d2.date.toString()).getDate()
+        );
+
+        setDailyReportData(dailyReports);
+        setDailyReportChartData(loadDailyReportBar(dailyReports));
       }
 
-      if (isServerOnline) fetchData();
-      else getDbData();
-    }, [server, month, refresh, isServerOnline])
+      if (db) {
+        if (isServerOnline) fetchData();
+        else getDbData();
+      }
+    }, [server, db, month, refresh, isServerOnline])
   );
 
   const barData = [
@@ -232,7 +250,9 @@ export default function TabOneScreen() {
     },
   ];
 
-  const loadDailyReportBar = (): {
+  const loadDailyReportBar = (
+    dailyReportData: DailyReport[]
+  ): {
     data: stackDataItem[];
     maxValue: number;
   } => {
@@ -275,23 +295,7 @@ export default function TabOneScreen() {
       <NotificationBox />
       <ServerHeader email={email} isServerOnline={isServerOnline} />
       <View style={styles.container}>
-        <View style={styles.calendarContainer}>
-          <CustomPressable
-            color={"lightblue"}
-            text={"-"}
-            padding={8}
-            paddingVertical={2}
-            onPress={() => setMonth(month - 1)}
-          />
-          <Text style={styles.title}>{MONTHS_LONG[month]}</Text>
-          <CustomPressable
-            color={"lightblue"}
-            text={"+"}
-            padding={8}
-            paddingVertical={2}
-            onPress={() => setMonth(month + 1)}
-          />
-        </View>
+        <Calendar month={month} setMonth={setMonth} />
         <Text style={styles.subtitle}>{`${daysTillEndOfMonth(
           month
         )} days till end of month`}</Text>
@@ -314,24 +318,12 @@ export default function TabOneScreen() {
           </View>
         </View>
         <View style={styles.horizontalChartContainer}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-evenly",
-              backgroundColor: "transparent",
-              width: "100%",
-              padding: 10,
-            }}
-          >
-            <View style={styles.chartLegend}>
-              <FontAwesome name="circle" size={10} color="lightgray" />
-              <Text style={styles.text}>Today</Text>
-            </View>
-            <View style={styles.chartLegend}>
-              <FontAwesome name="circle" size={10} color="#177AD5" />
-              <Text style={styles.text}>Predict</Text>
-            </View>
-          </View>
+          <ChartLegend
+            legends={[
+              { text: "Total", color: "gray" },
+              { text: "Predict", color: "#177AD5" },
+            ]}
+          />
           <BarChart
             horizontal
             width={320}
@@ -361,6 +353,31 @@ export default function TabOneScreen() {
           darkColor="rgba(255,255,255,0.1)"
         />
         <View style={styles.chartContainer}>
+          <ChartLegend
+            style={{ position: "absolute", top: 10 }}
+            legends={
+              dailyReportSelected
+                ? [
+                    {
+                      text: dailyReportSelected.peakCost.toFixed(1),
+                      color: "pink",
+                    },
+                    {
+                      text: dailyReportSelected.dayCost.toFixed(1),
+                      color: "#177AD5",
+                    },
+                    {
+                      text: dailyReportSelected.nightCost.toFixed(1),
+                      color: "lightblue",
+                    },
+                  ]
+                : [
+                    { text: "Peak", color: "pink" },
+                    { text: "Day", color: "#177AD5" },
+                    { text: "Night", color: "lightblue" },
+                  ]
+            }
+          />
           <BarChart
             height={verticalScale(200)}
             barWidth={25}
@@ -375,10 +392,31 @@ export default function TabOneScreen() {
               fontSize: 10,
               color: "gray",
             }}
-            stackData={loadDailyReportBar().data}
+            stackData={dailyReportChartData.data}
             yAxisThickness={0}
             xAxisThickness={0}
-            maxValue={loadDailyReportBar().maxValue * 1.1}
+            maxValue={dailyReportChartData.maxValue * 1.1}
+            onPress={(b: { label: string }) => {
+              if (dailyReportData) {
+                let orderedReport = dailyReportData.sort(
+                  (d1, d2) =>
+                    new Date(d1.date.toString()).getDate() -
+                    new Date(d2.date.toString()).getDate()
+                );
+                setDailyReportSelected(orderedReport[Number(b.label) - 1]);
+              }
+            }}
+            lineData={dailyReportData.map(() => ({
+              value: averageCost || 0,
+              label: "Average",
+            }))}
+            lineConfig={{
+              curvature: 0, // Straight line
+              hideDataPoints: true,
+              color: "lightgray",
+            }}
+            onBackgroundPress={() => setDailyReportSelected(undefined)}
+            dashGap={5}
             spacing={20}
             hideRules
             hideYAxisText

@@ -13,3 +13,4 @@
   - Fetch and store daily report data
 - 1.4.0
   - Improved drizzle sqlite stability with refined init
+  - Home daily report fetch and db storage

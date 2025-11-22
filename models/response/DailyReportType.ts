@@ -11,3 +11,19 @@ export type DailyReport = {
   totalKwh: Number;
   isSpike: Boolean;
 };
+
+export const dailyReportMapper = (entity: any): DailyReport => {
+  return {
+    id: entity.id,
+    date: entity.date,
+    dayCost: entity.dayCost,
+    peakCost: entity.peakCost,
+    nightCost: entity.nightCost,
+    peakKwh: entity.peakKwh,
+    nightKwh: entity.nightKwh,
+    dayKwh: entity.dayKwh,
+    totalCost: entity.totalCost,
+    totalKwh: entity.totalKwh,
+    isSpike: entity.isSpike,
+  };
+};
