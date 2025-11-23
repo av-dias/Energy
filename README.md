@@ -14,3 +14,4 @@
 - 1.4.0
   - Improved drizzle sqlite stability with refined init
   - Home daily report fetch and db storage
+  - BiMontlhy bill prediction

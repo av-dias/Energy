@@ -1,16 +1,81 @@
 import LoadingIndicator from "@/components/loadingIndicator";
 import UsableScreen from "@/components/usableScreen";
+import color from "@/constants/color";
 import { AppContext } from "@/contexts/appContext";
-import { getDatabase } from "@/db/client";
+import { DatabaseContext } from "@/contexts/dbContext";
+import {
+  DailyReport,
+  dailyReportMapper,
+} from "@/models/response/DailyReportType";
+import { getDailyReportByMonth } from "@/service/dailyReportService";
 import { getReportsFromYear } from "@/service/monthlyReportService";
 import { getUserByEmail } from "@/service/userService";
-import { convertDateToMonthString } from "@/utility/calendar";
+import {
+  bimonthlyPeriods,
+  convertDateToMonthString,
+  MONTHS_SHORT,
+} from "@/utility/calendar";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useContext, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { BarChart } from "react-native-gifted-charts";
 
-const db = getDatabase();
+const calculateBiMonthlyBill = (
+  dailyReport: {
+    [month: number]: DailyReport[];
+  },
+  fees: number
+): { period: string; amount: Number }[] => {
+  const bimonthlyFee = (fees / 12) * 2;
+
+  return bimonthlyPeriods
+    .map(([startMonth, endMonth]) => {
+      const period = `${MONTHS_SHORT[startMonth - 1]} - ${
+        MONTHS_SHORT[endMonth - 1]
+      }`;
+
+      let totalCost = 0;
+
+      // Iterate over all months in the period
+      for (let month = startMonth; month <= endMonth; ) {
+        if (!dailyReport[month]) {
+          month = (month % 12) + 1;
+          continue;
+        }
+
+        if (month == startMonth) {
+          totalCost += dailyReport[month].reduce(
+            (sum, item) =>
+              new Date(item.date.toString()).getDate() >= 15
+                ? sum + Number(item.totalCost)
+                : sum,
+            0
+          );
+        } else if (month == endMonth) {
+          totalCost += dailyReport[month].reduce(
+            (sum, item) =>
+              new Date(item.date.toString()).getDate() <= 15
+                ? sum + Number(item.totalCost)
+                : sum,
+            0
+          );
+        } else {
+          totalCost += dailyReport[month].reduce(
+            (sum, item) => sum + Number(item.totalCost),
+            0
+          );
+        }
+
+        // Move to next month (handle year wrap-around for Nov–Jan)
+        month = (month % 12) + 1;
+      }
+
+      if (totalCost > 0)
+        return { period: period, amount: totalCost + bimonthlyFee };
+      return undefined;
+    })
+    .filter((bill) => bill !== undefined);
+};
 
 export default function TabOneScreen() {
   /* Dev Zone Start */
@@ -19,12 +84,17 @@ export default function TabOneScreen() {
     server: [isServerOnline, setIsServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
+  const { db } = useContext(DatabaseContext);
   const [server] = serverConfig;
   /* Dev Zone End */
   const [loading, setLoading] = useState(false);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [reports, setReports] = useState<any[]>([]);
+  const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [totalCost, setTotalCost] = useState(0);
+  const [dailyReportData, setDailyReportData] = useState<{
+    [month: number]: DailyReport[];
+  }>({});
+  const [monthlyFee, setMonthlyFee] = useState(0);
 
   const getUser = () => {
     const user = getUserByEmail(db, email);
@@ -35,22 +105,52 @@ export default function TabOneScreen() {
     useCallback(() => {
       async function fetchData() {
         setLoading(true);
-        const user = getUser();
+        const user = await getUser();
 
         if (user && user?.uuid) {
-          const reports = getReportsFromYear(db, user?.uuid, year).sort(
+          const monthlyReports = getReportsFromYear(db, user?.uuid, year).sort(
             (a, b) => (a.month > b.month ? 1 : -1)
           );
-          setReports(reports);
-          const total = reports.reduce(
+
+          setMonthlyFee(monthlyReports[0].fees || 0);
+          setMonthlyReports(monthlyReports);
+          const total = monthlyReports.reduce(
             (acc, report) => acc + report.totalCost,
             0
           );
           setTotalCost(Number(total.toFixed(2)));
+
+          for (const r of monthlyReports) {
+            const month = new Date(r.month).getMonth() + 1;
+
+            const dailyReportEntity: any[] = await getDailyReportByMonth(
+              db,
+              user?.uuid ?? "",
+              year,
+              month
+            );
+
+            let dailyReports: DailyReport[] =
+              dailyReportEntity?.map(dailyReportMapper);
+
+            dailyReports = dailyReports.sort(
+              (d1, d2) =>
+                new Date(d1.date.toString()).getDate() -
+                new Date(d2.date.toString()).getDate()
+            );
+
+            setDailyReportData((prev) => ({
+              ...prev,
+              [month]: dailyReports,
+            }));
+          }
         }
         setLoading(false);
       }
-      fetchData();
+
+      if (db) {
+        fetchData();
+      }
     }, [db, year, server, email])
   );
 
@@ -82,7 +182,7 @@ export default function TabOneScreen() {
             noOfSections={2}
             barBorderRadius={4}
             frontColor="lightgray"
-            data={reports.map((report) => ({
+            data={monthlyReports.map((report) => ({
               value: report.totalCost,
               label: convertDateToMonthString(report.month),
               frontColor:
@@ -108,13 +208,39 @@ export default function TabOneScreen() {
             yAxisThickness={0}
             xAxisThickness={0}
             maxValue={
-              Math.max(...reports.map((report) => report.totalCost)) * 1.15
+              Math.max(...monthlyReports.map((report) => report.totalCost)) *
+              1.15
             }
             spacing={30}
             hideRules
             hideYAxisText
           />
         </View>
+        <ScrollView contentContainerStyle={{ gap: 10 }}>
+          <Text
+            style={styles.title}
+          >{`Bi-Monthly Bills start on 15th day`}</Text>
+          {dailyReportData &&
+            calculateBiMonthlyBill(dailyReportData, monthlyFee)?.map((bill) => (
+              <View
+                key={bill.period}
+                style={{
+                  padding: 20,
+                  paddingHorizontal: 20,
+                  backgroundColor: color.light.grayBlur,
+                  borderRadius: 10,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text>{`${bill.period} `}</Text>
+                <Text>
+                  <Text>{`${bill.amount.toFixed(2)}`}</Text>
+                  <Text style={[styles.symbol, { color: "black" }]}>{`€`}</Text>
+                </Text>
+              </View>
+            ))}
+        </ScrollView>
         <LoadingIndicator isLoading={loading} />
       </View>
     </UsableScreen>

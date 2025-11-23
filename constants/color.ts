@@ -1,4 +1,4 @@
-export default color = {
+export default {
   light: {
     red: "#E34444",
     warning: "pink",
