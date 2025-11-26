@@ -1,18 +1,17 @@
+import Calendar from "@/components/calendar";
 import CustomPressable from "@/components/customPressable";
 import InputBox from "@/components/InputBox";
+import LoadingIndicator from "@/components/loadingIndicator";
 import UsableScreen from "@/components/usableScreen";
 import { AppContext } from "@/contexts/appContext";
-import { getDatabase } from "@/db/client";
+import { DatabaseContext } from "@/contexts/dbContext";
 import { getMonthlyReportByMonth } from "@/service/monthlyReportService";
 import { getUserByEmail } from "@/service/userService";
-import { MONTHS_LONG } from "@/utility/calendar";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useContext, useState } from "react";
 import { View, Text } from "react-native";
 import { StyleSheet } from "react-native";
 import { PieChart } from "react-native-gifted-charts";
-
-const db = getDatabase();
 
 export default function TabOneScreen() {
   /* Dev Zone Start */
@@ -21,6 +20,7 @@ export default function TabOneScreen() {
     server: [isServerOnline, setIsServerOnline],
     userEmail: [email],
   } = useContext(AppContext);
+  const { db } = useContext(DatabaseContext);
   const [server] = serverConfig;
   /* Dev Zone End */
   const [pso, setPso] = useState(0);
@@ -42,22 +42,23 @@ export default function TabOneScreen() {
     return user;
   };
 
-  const loadSimulation = () => {
+  const loadSimulation = async () => {
     const monthlyPso = pso / 12;
     const monthlyAsc = asc / 12;
-    const user = getUser();
+    const user = await getUser();
 
     if (!user || !user?.uuid) {
       alert("No user found");
       return;
     }
 
-    const totalKwh = getMonthlyReportByMonth(
+    const report = await getMonthlyReportByMonth(
       db,
       user?.uuid,
       month + 1,
       year
-    )?.totalKwh;
+    );
+    const totalKwh = report?.totalKwh;
 
     if (!totalKwh || totalKwh <= 0) {
       alert("No usage data found for this month");
@@ -73,16 +74,15 @@ export default function TabOneScreen() {
       async function fetchData() {
         setLoading(true);
 
-        const user = getUser();
+        const user = await getUser();
 
         if (user && user?.uuid) {
-          const report = getMonthlyReportByMonth(
+          const report = await getMonthlyReportByMonth(
             db,
             user?.uuid,
             month + 1,
             year
           );
-          console.log(report);
 
           if (report) {
             setDayKwh(Number(report.totalDayKwh.toFixed(1)));
@@ -110,39 +110,18 @@ export default function TabOneScreen() {
 
   return (
     <UsableScreen>
-      <View style={{ gap: 50 }}>
+      <View style={{ gap: 50, padding: 30, paddingTop: 40 }}>
         <View style={{ gap: 20 }}>
-          <Text style={styles.title}>Current Period Usage</Text>
+          <Text style={styles.titleTop}>Current Period Usage</Text>
+          <Calendar month={month} setMonth={setMonth} />
           <View
             style={{
+              alignContent: "center",
               alignItems: "center",
-              gap: 5,
-              backgroundColor: "transparent",
-              flexDirection: "row",
               justifyContent: "center",
-            }}
-          >
-            <CustomPressable
-              color={"lightblue"}
-              text={"-"}
-              padding={8}
-              paddingVertical={2}
-              onPress={() => setMonth(month - 1)}
-            />
-            <Text style={styles.title}>{MONTHS_LONG[month]}</Text>
-            <CustomPressable
-              color={"lightblue"}
-              text={"+"}
-              padding={8}
-              paddingVertical={2}
-              onPress={() => setMonth(month + 1)}
-            />
-          </View>
-          <View
-            style={{
               flexDirection: "row",
-              justifyContent: "space-between",
               marginTop: 20,
+              gap: 50,
             }}
           >
             <PieChart
@@ -213,12 +192,23 @@ export default function TabOneScreen() {
         </View>
         <View style={{ gap: 20 }}>
           <Text style={styles.title}>Simulation Screen</Text>
-          <InputBox icon={undefined} placeholder={"PSO"} onChange={setPso} />
-          <InputBox icon={undefined} placeholder={"ASC"} onChange={setAsc} />
+          <InputBox
+            icon={undefined}
+            placeholder={"PSO"}
+            onChange={setPso}
+            keyboardType="numeric"
+          />
+          <InputBox
+            icon={undefined}
+            placeholder={"ASC"}
+            onChange={setAsc}
+            keyboardType="numeric"
+          />
           <InputBox
             icon={undefined}
             placeholder={"Flat Rate"}
             onChange={setFlatRate}
+            keyboardType="numeric"
           />
           <CustomPressable
             color={"lightblue"}
@@ -231,6 +221,7 @@ export default function TabOneScreen() {
             {simulatedCost !== null ? `Simulated Cost: ${simulatedCost} €` : ""}
           </Text>
         </View>
+        <LoadingIndicator isLoading={loading} />
       </View>
     </UsableScreen>
   );
@@ -248,6 +239,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     textAlign: "left",
+    color: "black",
+  },
+  titleTop: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "lightblue",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+    alignSelf: "center",
+    borderRadius: 10,
     color: "black",
   },
   server: {

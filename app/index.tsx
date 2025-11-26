@@ -8,8 +8,6 @@ import {
   getUserByEmail,
   insertOneUser,
 } from "@/service/userService";
-import { useMigrations } from "drizzle-orm/expo-sqlite/migrator";
-import migrations from "../drizzle/migrations"; // Adjust the path to your migrations file
 import InputBox from "@/components/InputBox";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import EvilIcons from "@expo/vector-icons/EvilIcons";

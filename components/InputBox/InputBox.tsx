@@ -39,6 +39,7 @@ const InputBox: React.FC<PropsWithChildren> = ({
       </View>
       <TextInput
         style={{ flex: 3 }}
+        placeholderTextColor={"gray"}
         placeholder={placeholder}
         onSubmitEditing={onSubmitEditing}
         onChangeText={onChange}
