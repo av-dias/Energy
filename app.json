@@ -4,21 +4,22 @@
     "slug": "Energy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/playstore.png",
     "scheme": "energy",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/energy.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.avdias.Energy"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/energy.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
